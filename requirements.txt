@@ -1,0 +1,9 @@
+# Requirements for AI Assistant Project
+# Core numerical computing
+numpy>=1.21.0
+
+# For visualizations (optional, but useful for understanding)
+matplotlib>=3.5.0
+
+# For testing
+pytest>=7.0.0
