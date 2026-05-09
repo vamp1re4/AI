@@ -137,6 +137,24 @@ class TextPredictor:
         _, _, _, _, _, probs = self.forward(X)
         return np.argmax(probs, axis=1)
 
+    def get_state(self) -> dict:
+        """Return a serializable state dictionary for checkpointing."""
+        return {
+            'embedding': self.embedding.copy(),
+            'W1': self.W1.copy(),
+            'b1': self.b1.copy(),
+            'W2': self.W2.copy(),
+            'b2': self.b2.copy()
+        }
+
+    def set_state(self, state: dict):
+        """Restore parameters from a checkpoint state."""
+        self.embedding = state['embedding'].copy()
+        self.W1 = state['W1'].copy()
+        self.b1 = state['b1'].copy()
+        self.W2 = state['W2'].copy()
+        self.b2 = state['b2'].copy()
+
     def generate(self, initial_tokens: List[int], seq_length: int,
                  max_new_tokens: int = 20, temperature: float = 1.0) -> List[int]:
         """Generate a sequence of next-token predictions."""

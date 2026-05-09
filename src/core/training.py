@@ -219,15 +219,15 @@ class Trainer:
     - Model checkpointing
     """
 
-    def __init__(self, model, loss_fn: Callable, optimizer_name: str = 'adam',
-                 learning_rate: float = 0.001, batch_size: int = 32):
+    def __init__(self, model, loss_fn: Optional[Callable] = None,
+                 optimizer_name: str = 'adam', learning_rate: float = 0.001, batch_size: int = 32):
         """
         Initialize trainer.
 
         Args:
             model: Neural network model to train
-            loss_fn: Loss function (should return loss value)
-            optimizer_name: Optimizer to use
+            loss_fn: Optional loss function for validation evaluation
+            optimizer_name: Optimizer to use (not always required by model)
             learning_rate: Initial learning rate
             batch_size: Mini-batch size
         """
@@ -327,28 +327,46 @@ class Trainer:
         """Validate on validation set. Returns (avg_loss, accuracy)."""
         X_val, y_val = self.data_loader.get_val_data()
 
-        # Get predictions and loss
+        # Get predictions and calculate accuracy
         predictions = self.model.predict(X_val)
         accuracy = np.mean(predictions == y_val)
 
-        # Calculate loss (this is approximate since we don't have batch processing for loss)
-        # In practice, you'd want to compute loss properly
-        val_loss = 1.0 - accuracy  # Simple approximation
+        if hasattr(self.model, 'compute_loss'):
+            _, _, _, _, _, probs = self.model.forward(X_val)
+            val_loss = self.model.compute_loss(probs, y_val)
+        else:
+            val_loss = self._compute_loss(X_val, y_val)
 
         return val_loss, accuracy
 
+    def _compute_loss(self, X: np.ndarray, y: np.ndarray) -> float:
+        """Compute loss for a dataset using available loss functions."""
+        if self.loss_fn is not None:
+            return float(self.loss_fn(self.model, X, y))
+
+        if hasattr(self.model, 'compute_loss'):
+            _, _, _, _, _, probs = self.model.forward(X)
+            return self.model.compute_loss(probs, y)
+
+        return 1.0 - np.mean(self.model.predict(X) == y)
+
     def _get_model_state(self) -> Dict:
         """Get current model parameters."""
-        return {
-            'W1': self.model.W1.copy(),
-            'b1': self.model.b1.copy(),
-            'W2': self.model.W2.copy(),
-            'b2': self.model.b2.copy()
-        }
+        if hasattr(self.model, 'get_state'):
+            return self.model.get_state()
+
+        state = {}
+        for key, value in vars(self.model).items():
+            if isinstance(value, np.ndarray):
+                state[key] = value.copy()
+        return state
 
     def _set_model_state(self, state: Dict):
         """Restore model parameters."""
-        self.model.W1 = state['W1'].copy()
-        self.model.b1 = state['b1'].copy()
-        self.model.W2 = state['W2'].copy()
-        self.model.b2 = state['b2'].copy()
+        if hasattr(self.model, 'set_state'):
+            self.model.set_state(state)
+            return
+
+        for key, value in state.items():
+            if hasattr(self.model, key):
+                setattr(self.model, key, value.copy() if isinstance(value, np.ndarray) else value)

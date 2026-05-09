@@ -24,11 +24,14 @@ This project builds a fully functional AI assistant completely from scratch, ste
 - ✅ Production-ready training infrastructure (DataLoader, Trainer, metrics, scheduling)
 - ✅ Dataset processing (synthetic data generation, preprocessing, splitting)
 - ✅ Text processing (tokenization, text datasets, sequence generation)
+- ✅ Attention architecture (scaled dot-product, multi-head self-attention, positional encoding)
+- ✅ Transformer-style predictor foundation
 
 ## Recent Achievements
 - **Training Infrastructure**: Complete training pipeline with batching, validation, early stopping, and learning rate scheduling
 - **Dataset Processing**: Synthetic dataset generation (XOR, circles, moons, blobs), data preprocessing, and cross-validation
 - **Text Processing**: Character and word-level tokenization, text cleaning, sequence generation for language modeling
+- **Attention/Transformers**: Added core attention blocks, positional encoding, transformer encoder layer, and a minimal transformer predictor
 
 ## Roadmap
 1. ✅ Python mastery
@@ -65,7 +68,11 @@ AI/
 │   │   ├── training.py            # Training infrastructure
 │   │   ├── datasets.py            # Dataset processing
 │   │   ├── text_processing.py     # Text tokenization & processing
-│   │   └── text_model.py          # Tiny text predictor model
+│   │   ├── text_model.py          # Tiny text predictor model
+│   │   ├── attention/
+│   │   │   └── attention.py       # Attention building blocks
+│   │   └── transformers/
+│   │       └── transformer.py     # Minimal transformer predictor
 │   ├── utils/
 │   └── models/
 ├── data/
@@ -74,9 +81,12 @@ AI/
 │   ├── test_mlp.py
 │   ├── test_activations.py
 │   ├── test_optimizers.py
-│   └── test_datasets_and_text.py
+│   ├── test_datasets_and_text.py
+│   ├── test_text_model.py
+│   └── test_attention_transformer.py
 ├── docs/
 ├── demo_datasets_and_text.py      # Dataset & text processing demo
+├── demo_text_training.py          # Text predictor training demo
 └── requirements.txt
 ```
 

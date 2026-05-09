@@ -5,6 +5,7 @@ Tests for the tiny text predictor model and next-token sequence utilities.
 import numpy as np
 from src.core.text_processing import CharacterTokenizer, TextDataset, TextPreprocessor
 from src.core.text_model import TextPredictor
+from src.core.training import Trainer
 
 class TestTextPreprocessorNextTokenSequences:
     def test_create_next_token_sequences(self):
@@ -64,3 +65,24 @@ class TestTextPredictor:
 
         assert len(generated) == len(initial_tokens) + 5
         assert all(isinstance(token, int) for token in generated)
+
+    def test_trainer_trains_text_predictor(self):
+        texts = ["hello world"]
+        tokenizer = CharacterTokenizer()
+        tokenizer.fit(texts)
+
+        dataset = TextDataset(texts, tokenizer)
+        X, y = dataset.create_next_token_sequences(seq_length=4)
+
+        model = TextPredictor(vocab_size=tokenizer.get_vocab_size(), embed_dim=8, hidden_size=16, learning_rate=0.01)
+        trainer = Trainer(
+            model,
+            loss_fn=lambda model, X, y: model.compute_loss(model.forward(X)[5], y),
+            batch_size=2
+        )
+
+        metrics = trainer.fit(X, y, epochs=5, val_split=0.2, patience=2, verbose=False)
+
+        assert len(metrics.epochs) > 0
+        assert hasattr(model, 'predict')
+        assert metrics.train_losses[-1] >= 0.0
