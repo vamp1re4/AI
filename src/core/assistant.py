@@ -2,16 +2,18 @@
 Assistant system built on a mini language model and conversation memory.
 
 Provides a lightweight conversational interface for prompts, responses,
-and history-aware generation.
+and history-aware generation. Includes self-modification capabilities for
+continuous learning and adaptation.
 """
 
 import numpy as np
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from .language_model import MiniLanguageModel
 from .memory import ConversationMemory
 from .text_processing import Tokenizer
+from .self_modifier import AdaptiveAI
 
 
 class AssistantSystem:
@@ -22,12 +24,17 @@ class AssistantSystem:
                  tokenizer: Tokenizer,
                  memory: Optional[ConversationMemory] = None,
                  seq_length: int = 32,
-                 system_prompt: str = 'You are a helpful assistant.'):
+                 system_prompt: str = 'You are a helpful assistant.',
+                 enable_self_modification: bool = True):
         self.model = model
         self.tokenizer = tokenizer
         self.memory = memory or ConversationMemory()
         self.seq_length = seq_length
         self.system_prompt = system_prompt
+        
+        # Self-modification capability
+        self.adaptive_ai = AdaptiveAI() if enable_self_modification else None
+        self.enable_self_modification = enable_self_modification
 
         if system_prompt:
             self.memory.add_system(system_prompt)
@@ -68,3 +75,40 @@ class AssistantSystem:
     def get_history(self) -> List[dict]:
         """Return the full conversation history."""
         return self.memory.entries
+
+    def assess_capabilities(self) -> Dict[str, Any]:
+        """Assess current AI capabilities and suggest improvements."""
+        if not self.enable_self_modification:
+            return {}
+        return self.adaptive_ai.assess_current_state()
+
+    def plan_adaptation(self, goal: str) -> List[Dict[str, str]]:
+        """Plan adaptations to achieve a specific goal."""
+        if not self.enable_self_modification:
+            return []
+        return self.adaptive_ai.plan_adaptation(goal)
+
+    def propose_enhancement(self, enhancement_type: str, **kwargs) -> Dict[str, Any]:
+        """Propose an enhancement to the AI system."""
+        if not self.enable_self_modification:
+            return {}
+        return self.adaptive_ai.propose_enhancement(enhancement_type, **kwargs)
+
+    def self_improve(self, goal: str) -> Dict[str, Any]:
+        """Attempt to improve the AI system based on a goal."""
+        if not self.enable_self_modification:
+            return {'status': 'disabled', 'message': 'Self-modification is disabled'}
+        
+        # Plan adaptation
+        plan = self.plan_adaptation(goal)
+        
+        # Execute adaptation
+        results = self.adaptive_ai.execute_adaptation(plan)
+        results['goal'] = goal
+        
+        return results
+
+    def save_modification_log(self, output_path: str = 'logs/modification_history.json') -> None:
+        """Save the history of all modifications."""
+        if self.enable_self_modification and self.adaptive_ai:
+            self.adaptive_ai.executor.save_modification_log(output_path)

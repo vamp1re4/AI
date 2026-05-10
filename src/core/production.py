@@ -3,12 +3,13 @@ Production-ready assistant wrapper.
 
 Combines model training, checkpointing, conversation memory, prompt formatting,
 voice output, and configurable behavior for a more realistic AI assistant workflow.
+Includes self-modification capabilities for continuous adaptation and improvement.
 """
 
 import json
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 import yaml
 
@@ -18,6 +19,7 @@ from .memory import ConversationMemory, KnowledgeMemory
 from .prompt import PromptTemplate
 from .voice import VoiceSystem
 from .text_processing import Tokenizer
+from .self_modifier import AdaptiveAI
 
 
 @dataclass
@@ -32,6 +34,7 @@ class ProductionAssistantConfig:
     model_path: str = 'models/assistant_model.npz'
     history_path: str = 'logs/assistant_history.json'
     use_voice: bool = False
+    enable_self_modification: bool = True
     optimizer: str = 'adam'
     optimizer_params: dict = field(default_factory=lambda: {'weight_decay': 1e-4})
     training_epochs: int = 20
@@ -70,6 +73,9 @@ class ProductionAssistant:
             system_prompt=self.config.system_prompt,
             max_history_messages=self.config.max_history_messages
         )
+        
+        # Self-modification capability
+        self.adaptive_ai = AdaptiveAI() if self.config.enable_self_modification else None
 
         if self.config.system_prompt:
             self.memory.add_system(self.config.system_prompt)
@@ -151,3 +157,40 @@ class ProductionAssistant:
         with open(self.config.history_path, 'r', encoding='utf-8') as f:
             entries = json.load(f)
         self.memory.entries = entries
+
+    def assess_capabilities(self) -> Dict[str, Any]:
+        """Assess current AI capabilities and suggest improvements."""
+        if not self.config.enable_self_modification or not self.adaptive_ai:
+            return {}
+        return self.adaptive_ai.assess_current_state()
+
+    def plan_adaptation(self, goal: str) -> List[Dict[str, str]]:
+        """Plan adaptations to achieve a specific goal."""
+        if not self.config.enable_self_modification or not self.adaptive_ai:
+            return []
+        return self.adaptive_ai.plan_adaptation(goal)
+
+    def propose_enhancement(self, enhancement_type: str, **kwargs) -> Dict[str, Any]:
+        """Propose an enhancement to the AI system."""
+        if not self.config.enable_self_modification or not self.adaptive_ai:
+            return {}
+        return self.adaptive_ai.propose_enhancement(enhancement_type, **kwargs)
+
+    def self_improve(self, goal: str) -> Dict[str, Any]:
+        """Attempt to improve the AI system based on a goal."""
+        if not self.config.enable_self_modification or not self.adaptive_ai:
+            return {'status': 'disabled', 'message': 'Self-modification is disabled'}
+        
+        # Plan adaptation
+        plan = self.plan_adaptation(goal)
+        
+        # Execute adaptation
+        results = self.adaptive_ai.execute_adaptation(plan)
+        results['goal'] = goal
+        
+        return results
+
+    def save_modification_log(self, output_path: str = 'logs/modification_history.json') -> None:
+        """Save the history of all modifications."""
+        if self.config.enable_self_modification and self.adaptive_ai:
+            self.adaptive_ai.executor.save_modification_log(output_path)
