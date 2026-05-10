@@ -156,7 +156,8 @@ class TextPredictor:
         self.b2 = state['b2'].copy()
 
     def generate(self, initial_tokens: List[int], seq_length: int,
-                 max_new_tokens: int = 20, temperature: float = 1.0) -> List[int]:
+                 max_new_tokens: int = 20, temperature: float = 1.0,
+                 sample: bool = False) -> List[int]:
         """Generate a sequence of next-token predictions."""
         generated = list(initial_tokens)
 
@@ -166,10 +167,13 @@ class TextPredictor:
             _, _, _, _, _, probs = self.forward(padded)
 
             if temperature != 1.0:
-                logits = np.log(probs + 1e-15) / temperature
+                logits = np.log(probs + 1e-15) / max(temperature, 1e-8)
                 probs = self.softmax(logits)
 
-            next_token = np.argmax(probs[0])
+            if sample:
+                next_token = int(np.random.choice(self.vocab_size, p=probs[0]))
+            else:
+                next_token = np.argmax(probs[0])
             generated.append(int(next_token))
 
         return generated

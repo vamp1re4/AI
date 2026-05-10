@@ -1,0 +1,18 @@
+system_prompt: "You are a production-ready AI assistant trained to help with coding and learning AI systems."
+max_seq_len: 32
+max_history_messages: 8
+response_length: 24
+temperature: 0.85
+sample: true
+checkpoint_dir: checkpoints/production_assistant
+model_path: models/production_assistant.npz
+history_path: logs/assistant_history.json
+use_voice: false
+optimizer: adam
+optimizer_params:
+  weight_decay: 0.0001
+training_epochs: 20
+training_batch_size: 8
+training_val_split: 0.2
+training_patience: 5
+training_seq_length: 6

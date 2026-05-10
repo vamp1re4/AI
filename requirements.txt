@@ -7,3 +7,9 @@ matplotlib>=3.5.0
 
 # For testing
 pytest>=7.0.0
+
+# Optional voice output
+pyttsx3>=2.90
+
+# Configuration file parsing
+pyyaml>=6.0

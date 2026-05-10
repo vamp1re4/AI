@@ -17,12 +17,13 @@ class Optimizer:
     Base class for optimization algorithms.
 
     All optimizers implement the same interface:
-    - update(weights, gradients, learning_rate)
+    - update(params, grads)
     - Maintain internal state (momentum, adaptive rates, etc.)
     """
 
-    def __init__(self, learning_rate=0.01):
+    def __init__(self, learning_rate=0.01, weight_decay=0.0):
         self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
 
     def update(self, params, grads):
         """
@@ -37,6 +38,15 @@ class Optimizer:
         """
         raise NotImplementedError
 
+    def set_learning_rate(self, learning_rate: float):
+        """Update the current learning rate."""
+        self.learning_rate = learning_rate
+
+    def _apply_weight_decay(self, param, grad):
+        if self.weight_decay and self.weight_decay > 0.0:
+            return grad + self.weight_decay * param
+        return grad
+
 class SGD(Optimizer):
     """
     Stochastic Gradient Descent - Basic optimizer.
@@ -50,13 +60,14 @@ class SGD(Optimizer):
     - Learning rate critical (too high = diverge, too low = slow)
     """
 
-    def __init__(self, learning_rate=0.01):
-        super().__init__(learning_rate)
+    def __init__(self, learning_rate=0.01, weight_decay=0.0):
+        super().__init__(learning_rate, weight_decay)
 
     def update(self, params, grads):
         updated_params = {}
         for key in params:
-            updated_params[key] = params[key] - self.learning_rate * grads[key]
+            grad = self._apply_weight_decay(params[key], grads[key])
+            updated_params[key] = params[key] - self.learning_rate * grad
         return updated_params
 
 class SGDMomentum(Optimizer):
@@ -73,8 +84,8 @@ class SGDMomentum(Optimizer):
     - Helps escape local minima
     """
 
-    def __init__(self, learning_rate=0.01, momentum=0.9):
-        super().__init__(learning_rate)
+    def __init__(self, learning_rate=0.01, momentum=0.9, weight_decay=0.0):
+        super().__init__(learning_rate, weight_decay)
         self.momentum = momentum
         self.velocity = {}
 
@@ -82,14 +93,11 @@ class SGDMomentum(Optimizer):
         updated_params = {}
 
         for key in params:
-            # Initialize velocity if not exists
+            grad = self._apply_weight_decay(params[key], grads[key])
             if key not in self.velocity:
                 self.velocity[key] = np.zeros_like(params[key])
 
-            # Update velocity: v = β*v + (1-β)*grad
-            self.velocity[key] = self.momentum * self.velocity[key] + (1 - self.momentum) * grads[key]
-
-            # Update parameters
+            self.velocity[key] = self.momentum * self.velocity[key] + (1 - self.momentum) * grad
             updated_params[key] = params[key] - self.learning_rate * self.velocity[key]
 
         return updated_params
@@ -108,8 +116,8 @@ class RMSProp(Optimizer):
     - β typically 0.9, ε=1e-8
     """
 
-    def __init__(self, learning_rate=0.001, beta=0.9, epsilon=1e-8):
-        super().__init__(learning_rate)
+    def __init__(self, learning_rate=0.001, beta=0.9, epsilon=1e-8, weight_decay=0.0):
+        super().__init__(learning_rate, weight_decay)
         self.beta = beta
         self.epsilon = epsilon
         self.squared_grad = {}
@@ -118,16 +126,13 @@ class RMSProp(Optimizer):
         updated_params = {}
 
         for key in params:
-            # Initialize squared gradient cache
+            grad = self._apply_weight_decay(params[key], grads[key])
             if key not in self.squared_grad:
                 self.squared_grad[key] = np.zeros_like(params[key])
 
-            # Update squared gradient moving average: s = β*s + (1-β)*grad²
-            self.squared_grad[key] = self.beta * self.squared_grad[key] + (1 - self.beta) * (grads[key] ** 2)
-
-            # Update parameters with adaptive learning rate
+            self.squared_grad[key] = self.beta * self.squared_grad[key] + (1 - self.beta) * (grad ** 2)
             adaptive_lr = self.learning_rate / (np.sqrt(self.squared_grad[key]) + self.epsilon)
-            updated_params[key] = params[key] - adaptive_lr * grads[key]
+            updated_params[key] = params[key] - adaptive_lr * grad
 
         return updated_params
 
@@ -148,8 +153,8 @@ class Adam(Optimizer):
     - Little hyperparameter tuning needed
     """
 
-    def __init__(self, learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
-        super().__init__(learning_rate)
+    def __init__(self, learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8, weight_decay=0.0):
+        super().__init__(learning_rate, weight_decay)
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
@@ -162,22 +167,17 @@ class Adam(Optimizer):
         updated_params = {}
 
         for key in params:
-            # Initialize moments
+            grad = self._apply_weight_decay(params[key], grads[key])
             if key not in self.m:
                 self.m[key] = np.zeros_like(params[key])
                 self.v[key] = np.zeros_like(params[key])
 
-            # Update first moment: m = β1*m + (1-β1)*grad
-            self.m[key] = self.beta1 * self.m[key] + (1 - self.beta1) * grads[key]
+            self.m[key] = self.beta1 * self.m[key] + (1 - self.beta1) * grad
+            self.v[key] = self.beta2 * self.v[key] + (1 - self.beta2) * (grad ** 2)
 
-            # Update second moment: v = β2*v + (1-β2)*grad²
-            self.v[key] = self.beta2 * self.v[key] + (1 - self.beta2) * (grads[key] ** 2)
-
-            # Bias correction
             m_hat = self.m[key] / (1 - self.beta1 ** self.t)
             v_hat = self.v[key] / (1 - self.beta2 ** self.t)
 
-            # Update parameters
             updated_params[key] = params[key] - self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
 
         return updated_params

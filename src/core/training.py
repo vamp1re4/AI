@@ -220,20 +220,22 @@ class Trainer:
     """
 
     def __init__(self, model, loss_fn: Optional[Callable] = None,
-                 optimizer_name: str = 'adam', learning_rate: float = 0.001, batch_size: int = 32):
+                 learning_rate: float = 0.001, batch_size: int = 32,
+                 checkpoint_dir: Optional[str] = None):
         """
         Initialize trainer.
 
         Args:
             model: Neural network model to train
             loss_fn: Optional loss function for validation evaluation
-            optimizer_name: Optimizer to use (not always required by model)
             learning_rate: Initial learning rate
             batch_size: Mini-batch size
+            checkpoint_dir: Directory where best model checkpoints will be saved
         """
         self.model = model
         self.loss_fn = loss_fn
         self.batch_size = batch_size
+        self.checkpoint_dir = checkpoint_dir
 
         # Initialize components
         self.metrics = TrainingMetrics()
@@ -243,6 +245,7 @@ class Trainer:
         # Training state
         self.best_model_state = None
         self.best_val_loss = float('inf')
+        self.best_checkpoint_path = None
 
     def fit(self, X: np.ndarray, y: np.ndarray, epochs: int = 100,
             val_split: float = 0.2, patience: int = 20, verbose: bool = True) -> TrainingMetrics:
@@ -260,43 +263,36 @@ class Trainer:
         Returns:
             TrainingMetrics object with full training history
         """
-        # Setup data loading
         self.data_loader = DataLoader(X, y, self.batch_size, val_split)
 
         start_time = time.time()
 
         for epoch in range(epochs):
-            # Train one epoch
             train_loss, train_acc = self._train_epoch()
-
-            # Validate
             val_loss, val_acc = self._validate()
 
-            # Update learning rate
             current_lr = self.lr_scheduler.step(val_loss)
+            self._update_optimizer_lr(current_lr)
 
-            # Update metrics
             self.metrics.update(epoch, train_loss, val_loss, train_acc, val_acc, current_lr)
 
-            # Checkpoint best model
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 self.best_model_state = self._get_model_state()
+                if self.checkpoint_dir is not None:
+                    self.best_checkpoint_path = self.save_checkpoint(epoch, val_loss)
 
-            # Print progress
             if verbose and epoch % 10 == 0:
                 elapsed = time.time() - start_time
                 print(f"Epoch {epoch:3d}: Train Loss={train_loss:.6f}, Val Loss={val_loss:.6f}, "
                       f"Train Acc={train_acc:.1%}, Val Acc={val_acc:.1%}, LR={current_lr:.6f}, "
                       f"Time={elapsed:.1f}s")
 
-            # Early stopping
             if self.metrics.should_early_stop(patience):
                 if verbose:
                     print(f"Early stopping at epoch {epoch} (patience={patience})")
                 break
 
-        # Restore best model
         if self.best_model_state is not None:
             self._set_model_state(self.best_model_state)
 
@@ -331,12 +327,7 @@ class Trainer:
         predictions = self.model.predict(X_val)
         accuracy = np.mean(predictions == y_val)
 
-        if hasattr(self.model, 'compute_loss'):
-            _, _, _, _, _, probs = self.model.forward(X_val)
-            val_loss = self.model.compute_loss(probs, y_val)
-        else:
-            val_loss = self._compute_loss(X_val, y_val)
-
+        val_loss = self._compute_loss(X_val, y_val)
         return val_loss, accuracy
 
     def _compute_loss(self, X: np.ndarray, y: np.ndarray) -> float:
@@ -345,8 +336,10 @@ class Trainer:
             return float(self.loss_fn(self.model, X, y))
 
         if hasattr(self.model, 'compute_loss'):
-            _, _, _, _, _, probs = self.model.forward(X)
-            return self.model.compute_loss(probs, y)
+            result = self.model.forward(X)
+            if isinstance(result, tuple) and len(result) > 0:
+                probs = result[-1]
+                return self.model.compute_loss(probs, y)
 
         return 1.0 - np.mean(self.model.predict(X) == y)
 
@@ -370,3 +363,32 @@ class Trainer:
         for key, value in state.items():
             if hasattr(self.model, key):
                 setattr(self.model, key, value.copy() if isinstance(value, np.ndarray) else value)
+
+    def save_checkpoint(self, epoch: int, val_loss: float) -> str:
+        """Save the current best model checkpoint."""
+        if self.checkpoint_dir is None:
+            raise ValueError('checkpoint_dir must be set to save checkpoints.')
+
+        import os
+        import numpy as np
+
+        os.makedirs(self.checkpoint_dir, exist_ok=True)
+        file_name = f"checkpoint_epoch_{epoch}_val_{val_loss:.6f}.npz"
+        checkpoint_path = os.path.join(self.checkpoint_dir, file_name)
+        state = self._get_model_state()
+        np.savez(checkpoint_path, **state)
+        return checkpoint_path
+
+    def load_checkpoint(self, filepath: str) -> None:
+        """Load a checkpoint from disk."""
+        import numpy as np
+
+        loaded = np.load(filepath, allow_pickle=True)
+        state = {key: loaded[key] for key in loaded.files}
+        self._set_model_state(state)
+
+    def _update_optimizer_lr(self, learning_rate: float) -> None:
+        """Propagate learning rate updates to the model optimizer if available."""
+        optimizer = getattr(self.model, 'optimizer', None)
+        if optimizer is not None and hasattr(optimizer, 'set_learning_rate'):
+            optimizer.set_learning_rate(learning_rate)

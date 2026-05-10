@@ -233,9 +233,9 @@ class PositionwiseFeedForward:
         return np.dot(hidden, self.W2) + self.b2
 
     def backward(self, d_output: np.ndarray) -> Tuple[np.ndarray, dict]:
-        batch_size, seq_len, _ = d_output.shape
+        batch_size, seq_len, d_model = d_output.shape
         flattened_hidden = self.cache['hidden'].reshape(-1, self.cache['hidden'].shape[-1])
-        flattened_output = d_output.reshape(-1, self.cache['hidden'].shape[-1])
+        flattened_output = d_output.reshape(-1, d_model)
 
         d_hidden = np.dot(flattened_output, self.W2.T).reshape(batch_size, seq_len, -1)
         dW2 = np.dot(flattened_hidden.T, flattened_output)

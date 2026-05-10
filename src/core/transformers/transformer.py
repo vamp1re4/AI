@@ -124,7 +124,7 @@ class TransformerPredictor:
 
     def __init__(self, vocab_size: int, d_model: int = 64, num_heads: int = 4,
                  d_ff: int = 128, num_layers: int = 2, max_seq_len: int = 32,
-                 learning_rate: float = 0.001, optimizer: str = 'adam'):
+                 learning_rate: float = 0.001, optimizer: str = 'adam', optimizer_params: Optional[dict] = None):
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.max_seq_len = max_seq_len
@@ -135,18 +135,21 @@ class TransformerPredictor:
         self.output_layer = np.random.randn(d_model, vocab_size) * np.sqrt(1.0 / d_model)
         self.output_bias = np.zeros((1, vocab_size))
 
-        optimizer_params = {'learning_rate': learning_rate}
-        if optimizer == 'momentum':
-            optimizer_params['momentum'] = 0.9
-        elif optimizer == 'rmsprop':
-            optimizer_params['beta'] = 0.9
-            optimizer_params['epsilon'] = 1e-8
-        elif optimizer == 'adam':
-            optimizer_params['beta1'] = 0.9
-            optimizer_params['beta2'] = 0.999
-            optimizer_params['epsilon'] = 1e-8
+        opt_params = {'learning_rate': learning_rate}
+        if optimizer_params is not None:
+            opt_params.update(optimizer_params)
 
-        self.optimizer = get_optimizer(optimizer, **optimizer_params)
+        if optimizer == 'momentum' and 'momentum' not in opt_params:
+            opt_params['momentum'] = 0.9
+        if optimizer == 'rmsprop':
+            opt_params.setdefault('beta', 0.9)
+            opt_params.setdefault('epsilon', 1e-8)
+        if optimizer == 'adam':
+            opt_params.setdefault('beta1', 0.9)
+            opt_params.setdefault('beta2', 0.999)
+            opt_params.setdefault('epsilon', 1e-8)
+
+        self.optimizer = get_optimizer(optimizer, **opt_params)
 
     @staticmethod
     def softmax(logits: np.ndarray) -> np.ndarray:
@@ -217,7 +220,7 @@ class TransformerPredictor:
         self.output_bias = updated['output_bias']
 
         for key in encoder_params.keys():
-            layer_name, layer_idx, param_name = key.split('_', 2)
+            _, layer_idx, param_name = key.split('_', 2)
             layer = self.encoder.layers[int(layer_idx)]
 
             if param_name in {'W_q', 'W_k', 'W_v', 'W_o'}:
@@ -235,32 +238,57 @@ class TransformerPredictor:
 
         return loss
 
-        return loss
-
     def predict(self, X: np.ndarray) -> np.ndarray:
         _, _, probs = self.forward(X)
         return np.argmax(probs, axis=1)
 
-    def generate(self, initial_tokens: np.ndarray, max_new_tokens: int = 20, temperature: float = 1.0) -> np.ndarray:
+    def generate(self, initial_tokens: np.ndarray, max_new_tokens: int = 20,
+                 temperature: float = 1.0, sample: bool = False) -> np.ndarray:
         generated = list(initial_tokens)
         for _ in range(max_new_tokens):
             context = np.array([generated[-self.max_seq_len:]])
             _, _, probs = self.forward(context)
+
             if temperature != 1.0:
-                logits = np.log(probs + 1e-15) / temperature
+                logits = np.log(probs + 1e-15) / max(temperature, 1e-8)
                 probs = self.softmax(logits)
-            next_token = int(np.argmax(probs[0]))
+
+            if sample:
+                next_token = int(np.random.choice(self.vocab_size, p=probs[0]))
+            else:
+                next_token = int(np.argmax(probs[0]))
+
             generated.append(next_token)
         return np.array(generated)
 
     def get_state(self) -> dict:
-        return {
+        state = {
             'embedding': self.embedding.copy(),
             'output_layer': self.output_layer.copy(),
             'output_bias': self.output_bias.copy()
         }
+        state.update(self.encoder.get_parameters())
+        return state
 
     def set_state(self, state: dict):
         self.embedding = state['embedding'].copy()
         self.output_layer = state['output_layer'].copy()
         self.output_bias = state['output_bias'].copy()
+
+        for key, value in state.items():
+            if key in {'embedding', 'output_layer', 'output_bias'}:
+                continue
+            _, layer_idx, param_name = key.split('_', 2)
+            layer = self.encoder.layers[int(layer_idx)]
+            if param_name in {'W_q', 'W_k', 'W_v', 'W_o'}:
+                setattr(layer.self_attention, param_name, value.copy())
+            elif param_name in {'W1', 'b1', 'W2', 'b2'}:
+                setattr(layer.feed_forward, param_name, value.copy())
+            elif param_name == 'layer_norm1_gamma':
+                layer.layer_norm1.gamma = value.copy()
+            elif param_name == 'layer_norm1_beta':
+                layer.layer_norm1.beta = value.copy()
+            elif param_name == 'layer_norm2_gamma':
+                layer.layer_norm2.gamma = value.copy()
+            elif param_name == 'layer_norm2_beta':
+                layer.layer_norm2.beta = value.copy()
