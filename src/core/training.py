@@ -11,6 +11,8 @@ Professional training requires:
 7. Checkpointing (save best models)
 """
 
+import json
+import os
 import numpy as np
 import time
 from typing import Dict, List, Tuple, Optional, Callable
@@ -282,15 +284,35 @@ class Trainer:
                 if self.checkpoint_dir is not None:
                     self.best_checkpoint_path = self.save_checkpoint(epoch, val_loss)
 
-            if verbose and epoch % 10 == 0:
+            epoch_pct = (epoch + 1) / epochs * 100.0
+            progress_data = {
+                'epoch': epoch + 1,
+                'total_epochs': epochs,
+                'percentage': round(epoch_pct, 1),
+                'train_loss': float(train_loss),
+                'val_loss': float(val_loss),
+                'train_accuracy': float(train_acc),
+                'val_accuracy': float(val_acc),
+                'learning_rate': float(current_lr),
+                'timestamp': time.time()
+            }
+
+            if self.checkpoint_dir is not None:
+                progress_path = os.path.join(self.checkpoint_dir, 'training_progress.json')
+                os.makedirs(self.checkpoint_dir, exist_ok=True)
+                with open(progress_path, 'w', encoding='utf-8') as progress_file:
+                    json.dump(progress_data, progress_file, indent=2)
+
+            if verbose:
                 elapsed = time.time() - start_time
-                print(f"Epoch {epoch:3d}: Train Loss={train_loss:.6f}, Val Loss={val_loss:.6f}, "
-                      f"Train Acc={train_acc:.1%}, Val Acc={val_acc:.1%}, LR={current_lr:.6f}, "
-                      f"Time={elapsed:.1f}s")
+                print(f"Epoch {epoch + 1:3d}/{epochs:3d} ({epoch_pct:5.1f}%): "
+                      f"Train Loss={train_loss:.6f}, Val Loss={val_loss:.6f}, "
+                      f"Train Acc={train_acc:.1%}, Val Acc={val_acc:.1%}, "
+                      f"LR={current_lr:.6f}, Time={elapsed:.1f}s")
 
             if self.metrics.should_early_stop(patience):
                 if verbose:
-                    print(f"Early stopping at epoch {epoch} (patience={patience})")
+                    print(f"Early stopping at epoch {epoch + 1} (patience={patience})")
                 break
 
         if self.best_model_state is not None:
